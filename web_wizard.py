@@ -368,16 +368,21 @@ class WizardHandler(http.server.BaseHTTPRequestHandler):
                     if p.get("type") not in ("direct", "reject") and "Day" not in p.get("name", "")
                 ]
 
-                # 3. Strategy Fix: STABLE FALLBACK (No frequent IP hopping)
-                # We use fallback with 600s interval to keep Telegram session stable!
+                # 3. Strategy Fix: STABLE FALLBACK & ZERO DATA WASTE (lazy health check)
                 groups = config_data.get("proxy-groups", [])
-                
-                # Check or add Stable-Telegram group
+
+                # Apply lazy: true and high interval to prevent data drain
+                for g in groups:
+                    if g.get("type") in ("url-test", "fallback", "load-balance"):
+                        g["lazy"] = True
+                        g["interval"] = 1800  # check every 30m only when traffic active
+
                 stable_tg_group = {
                     "name": "🛡 Stable-Telegram",
                     "type": "fallback",
                     "url": "https://api.telegram.org",
-                    "interval": 600,
+                    "interval": 1800,
+                    "lazy": True,
                     "proxies": real_proxies
                 }
                 
