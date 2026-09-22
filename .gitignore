@@ -1,0 +1,14 @@
+# Cache & logs
+*.log
+*.gz
+*.zip
+raw_config.yaml
+.env
+
+# Mihomo runtime cache
+bin/
+ui/
+
+# OS files
+.DS_Store
+Thumbs.db
