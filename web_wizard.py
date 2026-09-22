@@ -124,6 +124,11 @@ HTML_PAGE = """<!DOCTYPE html>
     <button type="button" class="tab-btn" id="tabWg" onclick="setMode('wg')">🛡 کانفیگ وایرگارد (WireGuard)</button>
   </div>
 
+  <div style="background: rgba(99, 102, 241, 0.1); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center;">
+    <span style="font-size: 0.88rem; color: #cbd5e1;">📊 آدرس کنترل‌پنل مانیتورینگ:</span>
+    <a id="topPanelLink" href="http://127.0.0.1:9090/ui/" target="_blank" style="color: #38bdf8; text-decoration: none; font-weight: 700; font-size: 0.9rem;">ورود به پنل MetaCubeXD ↗</a>
+  </div>
+
   <form id="wizardForm">
     <input type="hidden" id="inputMode" value="sub">
 
@@ -212,7 +217,10 @@ HTML_PAGE = """<!DOCTYPE html>
   fetch('/api/status').then(r => r.json()).then(data => {
     if(data.sub_url) document.getElementById('subUrl').value = data.sub_url;
     if(data.proxy_port) document.getElementById('proxyPort').value = data.proxy_port;
-    if(data.api_port) document.getElementById('apiPort').value = data.api_port;
+    if(data.api_port) {
+      document.getElementById('apiPort').value = data.api_port;
+      document.getElementById('topPanelLink').href = 'http://127.0.0.1:' + data.api_port + '/ui/';
+    }
     if(data.dedicated_ports) document.getElementById('dedicatedPorts').checked = true;
     if(data.mtproto_enabled) document.getElementById('enableMtproto').checked = true;
   });
