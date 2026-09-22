@@ -16,15 +16,32 @@
 
 ---
 
+## 📥 نصب و به‌روزرسانی سریع (دستورات مجزا)
+
+### ۱. نصب اولیه (First-time Install):
+کافیست در ترمینال macOS یا سرور لینوکس دستور زیر را اجرا کنید:
+```bash
+curl -fsSL https://raw.githubusercontent.com/ketabchi-ar/sub2proxy/main/install.sh | bash
+```
+
+### ۲. به‌روزرسانی یا تمدید ساب سوخته (Update / Renew):
+اگر ساب شما منقضی شد یا سرورها تغییر کردند، فقط دستور به‌روزرسانی زیر را اجرا کنید:
+```bash
+curl -fsSL https://raw.githubusercontent.com/ketabchi-ar/sub2proxy/main/install.sh | bash -s -- --update
+```
+*(یا اگر مخزن را کلون کرده‌اید: `./install.sh --update`)*
+
+---
+
 ## 🇮🇷 راهنمای فارسی
 
 ### 💡 پروژه sub2proxy چیست و چه دردی را دوا می‌کند؟
 بسیاری از کاربران فنی، برنامه‌نویسان و تریدرها در ایران هنگام کار با فیلترشکن‌ها با مشکلات زیر دست‌وپنجه نرم می‌کنند:
-1. **قفل شدن کل سیستم روی VPN:** اکثر کلاینت‌ها اینترنت کل ویندوز یا مک را وارد تونل VPN می‌کنند. در نتیجه سایت‌های بانکی، اداری، درگاه‌های پرداخت، پیام‌رسان‌های داخلی و سرورهای محلی کند، مختل یا تحریم می‌شوند.
-2. **پرش مداوم آی‌پی (IP Hopping) و حساسیت تلگرام:** کلاینت‌هایی که فقط بر اساس پینگ لحظه‌ای کار می‌کنند، هر ۲ دقیقه سرور را عوض می‌کنند؛ در نتیجه تلگرام مکرراً سشن عوض می‌کند و ممکن است اکانت مشکوک شناخته یا لیمیت شود.
-3. **دردسر کانفیگ دستی ابزارها:** کانفیگ کردن پورت‌های متعدد، تبدیل کانفیگ‌های وایرگارد، و اتصال تلگرام به پروکسی‌های پرسرعت زمان‌بر است.
+1. **قفل شدن کل سیستم روی VPN:** اکثر کلاینت‌ها اینترنت کل سیستم را وارد تونل VPN می‌کنند؛ در نتیجه سایت‌های بانکی، شتاب، درگاه‌های پرداخت، اسنپ، بورس و سرورهای داخلی کند یا مسدود می‌شوند.
+2. **پرش مداوم آی‌پی (IP Hopping) و حساسیت تلگرام:** کلاینت‌هایی که فقط بر اساس پینگ کار می‌کنند، هر چند دقیقه سرور را عوض می‌کنند؛ در نتیجه تلگرام مکرراً سشن عوض کرده و اکانت در معرض خطر لیمیت قرار می‌گیرد.
+3. **هدررفت ترافیک حجمی:** تست‌های پینگ مکرر در پس‌زمینه حجم زیادی از ساب‌های حجمی مصرف می‌کنند.
 
-**sub2proxy** تمام این کارها را در پس‌زمینه انجام می‌دهد: یک پورت پروکسی محلی مستقل و پایدار ایجاد می‌کند، سریع‌ترین سرور را انتخاب کرده و تا زمانی که نسوزد روی همان می‌ماند، و کل اینترنت سیستم شما را آزاد و دست‌نخورده باقی می‌گذارد.
+**sub2proxy** تمام این مشکلات را حل می‌کند: یک پورت پروکسی محلی مستقل و پایدار ایجاد می‌کند، سریع‌ترین سرور سالم را انتخاب کرده و با استراتژی **Fallback و Lazy Check** بدون مصرف بی‌مورد حجم روی همان می‌ماند.
 
 ---
 
@@ -32,12 +49,12 @@
 
 | امکان / گزینه | چرا این گزینه را گذاشتیم؟ (مزیت فنی) |
 | :--- | :--- |
-| **۱. استراتژی اتصال پایدار (Fallback Anti-Hopping)** | در حالت پیش‌فرض `url-test`، با جابه‌جایی ۱۰ میلی‌ثانیه‌ای پینگ، سرور عوض می‌شود. ما آن را روی **`fallback`** تنظیم کردیم تا آی‌پی شما ثابت بماند و فقط در صورت قطعی واقعی سوئیچ کند تا تلگرام و صرافی‌ها به تغییر مکرر کشور مشکوک نشوند. |
-| **۲. عدم درگیر کردن کل سیستم (`tun: false`)** | کارت شبکه مجازی غیرفعال است؛ بنابراین سایت‌های شتاب، بانک‌ها، اسنپ، بورس و دانلودهای ایرانی مستقیم و با حداکثر سرعت کار می‌کنند و فقط تلگرام یا برنامه‌ای که شما بخواهید از پروکسی رد می‌شود. |
-| **۳. پشتیبانی نیتیو از کانفیگ وایرگارد (WireGuard)** | وایرگارد به خودی خود VPN کل سیستم است. sub2proxy متن خام `.conf` را دریافت کرده و به یک پورت SOCKS5 تبدیل می‌کند؛ بدون نیاز به نصب کلاینت وایرگارد یا ایجاد کارت شبکه تونل. |
-| **۴. پورت‌های اختصاصی ثابت به ازای هر سرور (Dedicated Ports)** | اگر برای کارهای خاص (مثلاً تست با سرور یک کشور مشخص مثل آلمان) بخواهید همیشه یک IP ثابت داشته باشید، علاوه بر پورت هوشمند اصلی، پورت‌های ثابتی مثل `10802`، `10803` و... برای هر تک‌سرور در اختیار شماست. |
-| **۵. ویزارد تحت وب محلی (`http://127.0.0.1:9999`)** | برای اینکه کاربر درگیر خط فرمان و دستکاری فایل‌های YAML نشود، محیط گرافیکی کامل تحت وب با فونت استاندارد **وزیرمتن** طراحی شد. |
-| **۶. سازگاری دوگانه مک و سرور لینوکس (LaunchAgent / Systemd)** | در مک به صورت سرویس `LaunchAgent` و در اوبونتو/دبیان به صورت `Systemd` پس‌زمینه نصب می‌شود؛ یعنی سیستم یا سرور ری‌استارت هم شود، پروکسی شما خودکار بالا می‌آید. |
+| **۱. استراتژی اتصال پایدار و کاهش مصرف (Anti-Hopping & Lazy Check)** | برخلاف `url-test` که مدام سرور عوض می‌کند، روی **`fallback`** با قابلیت `lazy: true` تنظیم شده تا فقط هنگام قطعی سرور سوئیچ کند و در حالت بی‌کاری سیستم حتی ۱ مگابایت هم حجم هدر نرود. |
+| **۲. عدم درگیر کردن کل سیستم (`tun: false`)** | کارت شبکه مجازی غیرفعال است؛ سایت‌های ایرانی و بانکی مستقیم باز می‌شوند و فقط تلگرام یا برنامه‌ای که پورت لوکال را بدهید از فیلترشکن عبور می‌کند. |
+| **۳. پشتیبانی از کانفیگ وایرگارد (WireGuard)** | فایل‌های `.conf` وایرگارد را بدون نیاز به نصب کلاینت سنگین وایرگارد به یک پورت لوکال SOCKS5 تبدیل می‌کند. |
+| **۴. پورت‌های اختصاصی ثابت به ازای هر سرور (Dedicated Ports)** | علاوه بر پورت هوشمند اصلی (`10801`)، برای هر تک‌سرور یک پورت ثابت جداگانه (مثل `10802` برای آلمان، `10803` برای هلند) ایجاد می‌شود. |
+| **۵. تشخیص خودکار پورت آزاد (Auto Free Port)** | اگر پورت `9999` وب‌ویزارد مشغول باشد، اسکریپت خودکار اولین پورت آزاد بعدی را پیدا کرده و مرورگر را روی آن باز می‌کند. |
+| **۶. سازگاری دوگانه مک و لینوکس (LaunchAgent / Systemd)** | پروکسی به شکل سرویس پایدار سیستمی ثبت می‌شود و با ری‌استارت شدن دستگاه، همیشه آماده به کار است. |
 
 ---
 
@@ -55,42 +72,20 @@
 
 ---
 
-### 🚀 نصب و اجرای سریع (۱ خط دستور)
-
-کافیست در ترمینال macOS یا Ubuntu دستور زیر را اجرا کنید:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ketabchi-ar/sub2proxy/main/install.sh | bash
-```
-
-یا اجرای دستی پس از کلون مخزن:
-```bash
-git clone https://github.com/ketabchi-ar/sub2proxy.git
-cd sub2proxy
-chmod +x install.sh
-./install.sh
-```
-
----
-
 ## 🇬🇧 English Documentation
 
 ### 💡 What is sub2proxy?
-**sub2proxy** is a lightweight, zero-footprint local proxy gateway built on top of the ultra-fast Go-based Mihomo core. It turns remote V2Ray subscription links or WireGuard configurations into stable local SOCKS5/HTTP proxies (`127.0.0.1:10801`) without modifying the host network routing or intercepting domestic traffic.
+**sub2proxy** is a lightweight local proxy gateway built on top of the Mihomo core. It turns remote V2Ray subscriptions or raw WireGuard configs into stable local SOCKS5/HTTP proxies (`127.0.0.1:10801`) with zero system-wide network hijacking.
 
-### 🌟 Key Features & Architectural Rationale
-
-1. **Anti-Hopping Fallback Routing:** Avoids frequent IP jumps that trigger security alerts or rate-limits in Telegram and financial apps. Stays connected to the primary healthy node and switches only upon actual disconnection.
-2. **Zero System Interference:** Bypasses local system DNS and network interfaces. Domestic traffic, streaming, and banking stay direct and unaffected.
-3. **Native WireGuard Inbound Support:** Converts raw WireGuard `[Interface]` configuration files into local SOCKS5 proxies without needing kernel tun devices.
-4. **Per-Node Dedicated Multi-Inbound Ports:** In addition to the smart auto-fallback port (`10801`), dedicated static ports (`10802`, `10803`, ...) are assigned to each specific upstream server.
-5. **Interactive Web Setup & Local Dashboard:** Features a clean browser-based configuration wizard (`http://127.0.0.1:9999`) and a built-in MetaCubeXD monitoring dashboard with Persian typography.
-6. **Production-Ready Daemonization:** Runs out-of-the-box as a native `LaunchAgent` on macOS or a `systemd` service on Linux (Ubuntu/Debian).
-
-### 📥 Quick Start
-```bash
-curl -fsSL https://raw.githubusercontent.com/ketabchi-ar/sub2proxy/main/install.sh | bash
-```
+### 📥 Usage Commands
+- **Fresh Install:**
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/ketabchi-ar/sub2proxy/main/install.sh | bash
+  ```
+- **Update / Renew Subscription:**
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/ketabchi-ar/sub2proxy/main/install.sh | bash -s -- --update
+  ```
 
 ---
 

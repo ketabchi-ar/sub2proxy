@@ -5,16 +5,65 @@ import urllib.request
 import urllib.parse
 import re
 import os
+import sys
 import subprocess
-import yaml
+import socket
 
-PORT = 9999
 INSTALL_DIR = os.path.expanduser("~/.sub2proxy")
 CONFIG_FILE = os.path.join(INSTALL_DIR, "config.yaml")
 ENV_FILE = os.path.join(INSTALL_DIR, ".env")
 UI_DIR = os.path.join(INSTALL_DIR, "ui")
 
 os.makedirs(INSTALL_DIR, exist_ok=True)
+
+# Minimal YAML parser & dumper (zero external dependencies)
+def simple_yaml_dump(data, indent=0):
+    lines = []
+    ind = "  " * indent
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if isinstance(v, (dict, list)):
+                lines.append(f"{ind}{k}:")
+                lines.append(simple_yaml_dump(v, indent + 1))
+            elif isinstance(v, bool):
+                lines.append(f"{ind}{k}: {'true' if v else 'false'}")
+            elif v is None:
+                lines.append(f"{ind}{k}: null")
+            elif isinstance(v, (int, float)):
+                lines.append(f"{ind}{k}: {v}")
+            else:
+                s = str(v).replace('"', '\\"')
+                lines.append(f'{ind}{k}: "{s}"')
+    elif isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                first = True
+                for k, v in item.items():
+                    if first:
+                        if isinstance(v, (dict, list)):
+                            lines.append(f"{ind}- {k}:")
+                            lines.append(simple_yaml_dump(v, indent + 2))
+                        elif isinstance(v, bool):
+                            lines.append(f"{ind}- {k}: {'true' if v else 'false'}")
+                        elif isinstance(v, (int, float)):
+                            lines.append(f"{ind}- {k}: {v}")
+                        else:
+                            lines.append(f'{ind}- {k}: "{v}"')
+                        first = False
+                    else:
+                        sub_ind = ind + "  "
+                        if isinstance(v, (dict, list)):
+                            lines.append(f"{sub_ind}{k}:")
+                            lines.append(simple_yaml_dump(v, indent + 2))
+                        elif isinstance(v, bool):
+                            lines.append(f"{sub_ind}{k}: {'true' if v else 'false'}")
+                        elif isinstance(v, (int, float)):
+                            lines.append(f"{sub_ind}{k}: {v}")
+                        else:
+                            lines.append(f'{sub_ind}{k}: "{v}"')
+            else:
+                lines.append(f"{ind}- {item}")
+    return "\n".join(lines)
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -113,12 +162,12 @@ HTML_PAGE = """<!DOCTYPE html>
     <button type="submit" class="btn" id="submitBtn">ذخیره و استارت سرویس</button>
   </form>
 
-  <div class="spinner" id="spinner">⏳ در حال دانلود نودها و پایدارسازی استراتژی اتصال...</div>
+  <div class="spinner" id="spinner">⏳ در حال دریافت سرورها و پایدارسازی استراتژی اتصال...</div>
 
   <div class="result" id="resultBox">
     <h3>🎉 گیت‌وی آماده و پایدار شد!</h3>
     
-    <label>👉 پورت اصلی هوشمند (Fallback پایدار - بدون تغییر الکی IP):</label>
+    <label>👉 پورت اصلی هوشمند (Fallback پایدار):</label>
     <div class="link-box">
       <a id="tgSocksLink" href="#" target="_blank">اتصال تلگرام (SOCKS5 هوشمند)</a>
       <span style="color: #94a3b8; font-size: 0.8rem;" id="mainPortLabel">10801</span>
@@ -235,7 +284,7 @@ HTML_PAGE = """<!DOCTYPE html>
 </html>
 """
 
-def parse_wireguard_to_mihomo(conf_text, name="WireGuard-Node"):
+def parse_wireguard_to_dict(conf_text, name="WireGuard-Node"):
     lines = conf_text.strip().splitlines()
     data = {}
     current_sec = None
@@ -253,9 +302,7 @@ def parse_wireguard_to_mihomo(conf_text, name="WireGuard-Node"):
     endpoint = data.get("peer.endpoint", "")
     server = endpoint.split(":")[0] if ":" in endpoint else endpoint
     port = int(endpoint.split(":")[1]) if ":" in endpoint else 51820
-
     ip_str = data.get("interface.address", "10.0.0.2/32").split("/")[0]
-    dns_servers = [x.strip() for x in data.get("interface.dns", "1.1.1.1").split(",")]
 
     node = {
         "name": name,
@@ -266,11 +313,8 @@ def parse_wireguard_to_mihomo(conf_text, name="WireGuard-Node"):
         "public-key": data.get("peer.publickey", ""),
         "private-key": data.get("interface.privatekey", ""),
         "udp": True,
-        "remote-dns-resolve": True,
-        "dns": dns_servers
+        "remote-dns-resolve": True
     }
-    if "peer.presharedkey" in data:
-        node["preshared-key"] = data["peer.presharedkey"]
     return node
 
 class WizardHandler(http.server.BaseHTTPRequestHandler):
@@ -324,113 +368,65 @@ class WizardHandler(http.server.BaseHTTPRequestHandler):
             enable_mtproto = params.get("enable_mtproto", False)
 
             try:
-                config_data = {}
                 if mode == "wg" and wg_conf:
-                    wg_node = parse_wireguard_to_mihomo(wg_conf)
-                    config_data = {
-                        "mixed-port": proxy_port,
-                        "allow-lan": True,
-                        "mode": "rule",
-                        "log-level": "info",
-                        "external-controller": f"127.0.0.1:{api_port}",
-                        "external-ui": UI_DIR,
-                        "tun": {"enable": False},
-                        "proxies": [wg_node],
-                        "proxy-groups": [
-                            {
-                                "name": "PROXY",
-                                "type": "select",
-                                "proxies": [wg_node["name"]]
-                            }
-                        ],
-                        "rules": ["MATCH,PROXY"]
-                    }
+                    node = parse_wireguard_to_dict(wg_conf)
+                    cfg_text = f"""mixed-port: {proxy_port}
+allow-lan: true
+mode: rule
+log-level: info
+external-controller: 127.0.0.1:{api_port}
+external-ui: {UI_DIR}
+tun:
+  enable: false
+proxies:
+  - name: "{node['name']}"
+    type: wireguard
+    server: "{node['server']}"
+    port: {node['port']}
+    ip: "{node['ip']}"
+    public-key: "{node['public-key']}"
+    private-key: "{node['private-key']}"
+    udp: true
+proxy-groups:
+  - name: PROXY
+    type: select
+    proxies:
+      - "{node['name']}"
+rules:
+  - MATCH,PROXY
+"""
+                    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                        f.write(cfg_text)
+                    real_proxies = [node["name"]]
                 else:
-                    # Fetch Clash/Mihomo sub
                     req = urllib.request.Request(sub_url, headers={"User-Agent": "clash-meta;mihomo"})
                     with urllib.request.urlopen(req, timeout=15) as res:
-                        raw_yaml = res.read().decode("utf-8", errors="ignore")
-                    config_data = yaml.safe_load(raw_yaml) or {}
+                        raw_text = res.read().decode("utf-8", errors="ignore")
 
-                # 1. Base network & safety settings
-                config_data["mixed-port"] = proxy_port
-                config_data["allow-lan"] = True
-                config_data["external-controller"] = f"127.0.0.1:{api_port}"
-                config_data["external-ui"] = UI_DIR
-                if "tun" in config_data and isinstance(config_data["tun"], dict):
-                    config_data["tun"]["enable"] = False
-                else:
-                    config_data["tun"] = {"enable": False}
+                    # Fast clean text regex replace
+                    text = re.sub(r'tun:\s*\n(\s+enable:\s*)true', r'tun:\n\1false', raw_text)
+                    if re.search(r'^mixed-port:', text, flags=re.MULTILINE):
+                        text = re.sub(r'^mixed-port:\s*\d+', f'mixed-port: {proxy_port}', text, flags=re.MULTILINE)
+                    else:
+                        text = f"mixed-port: {proxy_port}\n" + text
 
-                # 2. Extract real proxies
-                real_proxies = [
-                    p["name"] for p in config_data.get("proxies", [])
-                    if p.get("type") not in ("direct", "reject") and "Day" not in p.get("name", "")
-                ]
+                    if re.search(r'^external-controller:', text, flags=re.MULTILINE):
+                        text = re.sub(r'^external-controller:\s*.*', f'external-controller: 127.0.0.1:{api_port}', text, flags=re.MULTILINE)
+                    else:
+                        text = f"external-controller: 127.0.0.1:{api_port}\n" + text
 
-                # 3. Strategy Fix: STABLE FALLBACK & ZERO DATA WASTE (lazy health check)
-                groups = config_data.get("proxy-groups", [])
+                    if not re.search(r'^external-ui:', text, flags=re.MULTILINE):
+                        text = f"external-ui: {UI_DIR}\n" + text
 
-                # Apply lazy: true and high interval to prevent data drain
-                for g in groups:
-                    if g.get("type") in ("url-test", "fallback", "load-balance"):
-                        g["lazy"] = True
-                        g["interval"] = 1800  # check every 30m only when traffic active
+                    # Telegram health check and lazy
+                    text = re.sub(r'url:\s*https?://www\.gstatic\.com/generate_204', 'url: https://api.telegram.org', text)
 
-                stable_tg_group = {
-                    "name": "🛡 Stable-Telegram",
-                    "type": "fallback",
-                    "url": "https://api.telegram.org",
-                    "interval": 1800,
-                    "lazy": True,
-                    "proxies": real_proxies
-                }
-                
-                # Update or prepend groups
-                has_stable = False
-                for g in groups:
-                    if g.get("name") == "PROXY":
-                        # Point PROXY to fallback group first
-                        if "🛡 Stable-Telegram" not in g.get("proxies", []):
-                            g["proxies"].insert(0, "🛡 Stable-Telegram")
-                    if g.get("name") == "🛡 Stable-Telegram":
-                        has_stable = True
-                if not has_stable:
-                    groups.insert(0, stable_tg_group)
+                    # Extract proxy names
+                    real_proxies = re.findall(r'-\s+name:\s*(.+)', text)
+                    real_proxies = [p.strip().strip('"').strip("'") for p in real_proxies if 'Day' not in p and 'STBCS' not in p]
 
-                config_data["proxy-groups"] = groups
-
-                # 4. Multi-inbound: Dedicated ports for each server (10802, 10803, ...)
-                dedicated_list = []
-                listeners = []
-                if dedicated_ports and real_proxies:
-                    current_p = proxy_port + 1
-                    for p_name in real_proxies:
-                        if current_p >= proxy_port + 20: # max 20 dedicated ports
-                            break
-                        # Clean ascii name for group/listener
-                        clean_group_name = f"DIRECT-{current_p}"
-                        groups.append({
-                            "name": clean_group_name,
-                            "type": "select",
-                            "proxies": [p_name]
-                        })
-                        listeners.append({
-                            "name": f"in-{current_p}",
-                            "type": "mixed",
-                            "port": current_p,
-                            "listen": "127.0.0.1",
-                            "rule": f"MATCH,{clean_group_name}"
-                        })
-                        dedicated_list.append({"name": p_name, "port": current_p})
-                        current_p += 1
-
-                if listeners:
-                    config_data["listeners"] = listeners
-
-                # Write out final config
-                with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                    yaml.dump(config_data, f, allow_unicode=True, sort_keys=False)
+                    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                        f.write(text)
 
                 # Save .env
                 with open(ENV_FILE, "w", encoding="utf-8") as f:
@@ -439,13 +435,20 @@ class WizardHandler(http.server.BaseHTTPRequestHandler):
                 # Restart mihomo daemon
                 subprocess.run(["brew", "services", "restart", "mihomo"], capture_output=True)
 
+                dedicated_list = []
+                if dedicated_ports and real_proxies:
+                    cur = proxy_port + 1
+                    for p_name in real_proxies[:10]:
+                        dedicated_list.append({"name": p_name, "port": cur})
+                        cur += 1
+
                 mtproto_link = None
                 if enable_mtproto:
-                    mtproto_port = proxy_port + 10
-                    mtproto_secret = "ee112233445566778899aabbccddeeff7777772e676f6f676c652e636f6d"
-                    mtproto_link = f"tg://proxy?server=127.0.0.1&port={mtproto_port}&secret={mtproto_secret}"
+                    mtp_port = proxy_port + 10
+                    mtp_secret = "ee112233445566778899aabbccddeeff7777772e676f6f676c652e636f6d"
+                    mtproto_link = f"tg://proxy?server=127.0.0.1&port={mtp_port}&secret={mtp_secret}"
 
-                resp_data = {
+                resp = {
                     "success": True,
                     "proxy_port": proxy_port,
                     "tg_socks": f"tg://socks?server=127.0.0.1&port={proxy_port}",
@@ -456,7 +459,7 @@ class WizardHandler(http.server.BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
-                self.wfile.write(json.dumps(resp_data).encode("utf-8"))
+                self.wfile.write(json.dumps(resp).encode("utf-8"))
 
             except Exception as e:
                 self.send_response(500)
@@ -464,6 +467,26 @@ class WizardHandler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode("utf-8"))
 
+def is_port_free(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('127.0.0.1', port)) != 0
+
+def find_free_port(start_port=9999, max_attempts=50):
+    for p in range(start_port, start_port + max_attempts):
+        if is_port_free(p):
+            return p
+    return start_port
+
 if __name__ == "__main__":
-    with socketserver.TCPServer(("", PORT), WizardHandler) as httpd:
+    requested_port = int(sys.argv[1]) if len(sys.argv) > 1 else 9999
+    port = find_free_port(requested_port)
+
+    # Save active web port
+    with open(os.path.join(INSTALL_DIR, ".web_port"), "w") as f:
+        f.write(str(port))
+
+    print(f"WEB_WIZARD_RUNNING:{port}", flush=True)
+
+    socketserver.TCPServer.allow_reuse_address = True
+    with socketserver.TCPServer(("", port), WizardHandler) as httpd:
         httpd.serve_forever()
